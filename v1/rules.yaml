@@ -1,0 +1,169 @@
+ignore_ips:
+  - "Personal Computer IP"
+  - "Raspberry PI IP"
+
+rules:
+  - id: "dns_risky_infra"
+    name: "DNS: risky infra (shorteners/paste/dynamic DNS)"
+    type: "dns_domain"
+    severity: "high"
+    enabled: true
+    match:
+      domains:
+        - "bit.ly"
+        - "tinyurl.com"
+        - "t.co"
+        - "pastebin.com"
+        - "raw.githubusercontent.com"
+        - "ngrok.io"
+        - "duckdns.org"
+        - "no-ip.com"
+        - "ddns.net"
+        - "dynv6.net"
+      match_subdomains: true
+
+  # DNS: test rule you can keep disabled after setup
+  - id: "dns_test_alert"
+    name: "TEST: DNS to test-alert.local"
+    type: "dns_domain"
+    severity: "low"
+    enabled: false
+    match:
+      domains: ["test-alert.local"]
+      match_subdomains: true
+
+  # SSH brute-force hint
+  - id: "ssh_bruteforce_syn"
+    name: "SSH: brute-force hint (many SYN to 22)"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==22 && ip.src"
+    threshold: 40
+
+  # RDP probe
+  - id: "rdp_probe"
+    name: "RDP: probe to 3389"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==3389 && ip.src"
+    threshold: 8
+
+  # SMB probe
+  - id: "smb_probe"
+    name: "SMB: probe to 445"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==445 && ip.src"
+    threshold: 8
+
+  # Telnet probe
+  - id: "telnet_probe"
+    name: "Telnet: probe to 23 (IoT targeting)"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==23 && ip.src"
+    threshold: 6
+
+  # Modbus probe
+  - id: "modbus_probe"
+    name: "ICS: Modbus probe to 502"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==502 && ip.src"
+    threshold: 3
+
+  # PostgreSQL probe
+  - id: "postgres_probe"
+    name: "DB: PostgreSQL probe to 5432"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==5432 && ip.src"
+    threshold: 5
+
+  # MySQL probe
+  - id: "mysql_probe"
+    name: "DB: MySQL probe to 3306"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==3306 && ip.src"
+    threshold: 5
+
+  # Redis probe
+  - id: "redis_probe"
+    name: "DB: Redis probe to 6379"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==6379 && ip.src"
+    threshold: 5
+
+  # MongoDB probe
+  - id: "mongo_probe"
+    name: "DB: MongoDB probe to 27017"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==27017 && ip.src"
+    threshold: 5
+
+  # Generic scan indicator: SYN spike
+  - id: "syn_spike"
+    name: "Recon: SYN spike (scan-ish behavior)"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && ip.src"
+    threshold: 250
+
+  # Excessive TCP volume
+  - id: "tcp_volume_spike"
+    name: "Network: high TCP packet count per src"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "tcp && ip.src"
+    threshold: 700
+
+  # DNS NXDOMAIN spike
+  - id: "dns_nxdomain_spike"
+    name: "DNS: NXDOMAIN spike"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "dns.flags.rcode==3 && ip.src"
+    threshold: 60
+
+  # ICMP spike
+  - id: "icmp_spike"
+    name: "Recon: ICMP spike"
+    type: "count_by_src"
+    severity: "low"
+    enabled: true
+    filter: "icmp && ip.src"
+    threshold: 200
+
+
+  # TEST: SYN spike (nmap-ish)
+  - id: "test_syn_spike"
+    name: "TEST: SYN spike (nmap-ish)"
+    type: "count_by_src"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && ip.src"
+    threshold: 40
+
+  # TEST: high TCP packets per src
+  - id: "test_any_tcp_volume"
+    name: "TEST: high TCP packets per src"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "tcp && ip.src"
+    threshold: 120
