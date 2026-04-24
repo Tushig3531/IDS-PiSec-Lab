@@ -1,0 +1,167 @@
+ignore_ips:
+  - "" # mac
+  - "" # pi
+  - ""   # router
+
+rules:
+  - id: "ssh_scan"
+    name: "Secure Shell: so many repeated SYNs to port 22"
+    type: "count_by_src_dstport"
+    severity: "medium"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==22 && ip.src"
+    threshold: 80
+    message: "Means one source IP sent many connection attempts to SSH port 22."
+
+  - id: "rdp_scan"
+    name: "Remote Desktop Protocol: so many repeated SYNs to port 3389"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==3389 && ip.src"
+    threshold: 10
+    message: "Means one source IP repeatedly tried to connect to Remote Desktop port 3389."
+
+  - id: "smb_scan"
+    name: "Server Message Block: so many repeated SYNs to port 445"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==445 && ip.src"
+    threshold: 10
+    message: "Means one source IP repeatedly tried to connect to SMB port 445. This may indicate Windows file-sharing reconnaissance or lateral movement attempts."
+
+  - id: "telnet_scan"
+    name: "Telnet: so many repeated SYNs to port 23"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==23 && ip.src"
+    threshold: 4
+    message: "Means one source IP repeatedly tried to connect to Telnet port 23. Telnet is insecure and often targeted in IoT attacks."
+
+  - id: "vnc_scan"
+    name: "Virtual Network Computing: so many repeated SYNs to port 5900"
+    type: "count_by_src_dstport"
+    severity: "medium"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==5900 && ip.src"
+    threshold: 6
+    message: "Means one source IP repeatedly tried to connect to VNC port 5900. It may indicate remote desktop scanning."
+
+  - id: "ftp_scan"
+    name: "File Transfer Protocol: so many repeated SYNs to port 21"
+    type: "count_by_src_dstport"
+    severity: "medium"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==21 && ip.src"
+    threshold: 10
+    message: "Means one source IP repeatedly tried to connect to FTP port 21. This may indicate scanning for exposed file-transfer services."
+
+  - id: "adb_scan"
+    name: "Android Debug Bridge: so many repeated SYNs to port 5555"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==5555 && ip.src"
+    threshold: 3
+    message: "Means one source IP repeatedly tried to connect to Android Debug Bridge port 5555. This can indicate attempts to find exposed Android debug services."
+
+  - id: "docker_api_scan"
+    name: "Docker API: so many repeated SYNs to port 2375"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==2375 && ip.src"
+    threshold: 3
+    message: "Means one source IP repeatedly tried to connect to Docker API port 2375. This is dangerous because exposed Docker APIs can allow remote control of containers."
+
+  - id: "snmp_scan"
+    name: "Simple Network Management Protocol: so many repeated packets to port 161"
+    type: "count_by_src_dstport"
+    severity: "medium"
+    enabled: true
+    filter: "udp.dstport==161 && ip.src"
+    threshold: 20
+    message: "Means one source IP sent many packets to SNMP port 161. This may indicate SNMP probing or attempts to query network device information."
+
+  - id: "router_admin_scan"
+    name: "Router admin or appliance ports scanned"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "(tcp.flags.syn==1 && tcp.flags.ack==0) && (tcp.dstport==7547 || tcp.dstport==8080 || tcp.dstport==8443 || tcp.dstport==8291 || tcp.dstport==8728) && ip.src"
+    threshold: 12
+    message: "Means one source IP tried several times to connect to common router or appliance management ports. This may indicate attempts to find web admin panels or device management services."
+
+  - id: "sensitive_port_recon"
+    name: "Recon: activity across sensitive ports"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "((tcp.flags.syn==1 && tcp.flags.ack==0) && (tcp.dstport==21 || tcp.dstport==22 || tcp.dstport==23 || tcp.dstport==80 || tcp.dstport==443 || tcp.dstport==445 || tcp.dstport==3389 || tcp.dstport==5900 || tcp.dstport==5555 || tcp.dstport==2375 || tcp.dstport==7547 || tcp.dstport==8080 || tcp.dstport==8443 || tcp.dstport==8291 || tcp.dstport==8728) || (udp.dstport==161)) && ip.src"
+    threshold: 25
+    message: "Means one source IP showed activity across multiple sensitive service ports. It may indicate general reconnaissance or service discovery."
+
+  - id: "syn_spike"
+    name: "Recon: high SYN count per source"
+    type: "count_by_src"
+    severity: "low"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && ip.src"
+    threshold: 400
+    message: "Means one source IP sent an unusually high number of TCP SYN packets. It can indicate scanning or very aggressive connection attempts."
+
+  - id: "icmp_spike"
+    name: "Recon: high ICMP count per source"
+    type: "count_by_src"
+    severity: "low"
+    enabled: true
+    filter: "icmp && ip.src"
+    threshold: 300
+    message: "Means one source IP sent a high number of ICMP packets. It may indicate ping sweeps, host discovery, or network mapping."
+
+  - id: "dns_dynamic_dns_watch"
+    name: "DNS: dynamic DNS lookup observed"
+    type: "dns_domain"
+    severity: "medium"
+    enabled: true
+    match:
+      domains:
+        - "duckdns.org"
+        - "no-ip.com"
+        - "ddns.net"
+        - "dynv6.net"
+      match_subdomains: true
+    message: "Means a device looked up a dynamic DNS domain. Dynamic DNS can be used legitimately, but it is also common in remote access, malware, and command-and-control setups."
+
+  - id: "dns_tunnel_or_remote_access_watch"
+    name: "DNS: tunnel or remote-access infra lookup observed"
+    type: "dns_domain"
+    severity: "medium"
+    enabled: true
+    match:
+      domains:
+        - "ngrok.io"
+        - "ngrok-free.app"
+        - "trycloudflare.com"
+        - "serveo.net"
+      match_subdomains: true
+    message: "Means a device looked up a domain commonly used for tunneling or remote-access exposure. It may indicate remote access software, tunnel usage, or suspicious traffic."
+
+  - id: "dns_nxdomain_spike"
+    name: "DNS: high NXDOMAIN count per source"
+    type: "count_by_src"
+    severity: "low"
+    enabled: true
+    filter: "dns.flags.rcode==3 && ip.src"
+    threshold: 100
+    message: "Means one source IP generated many DNS NXDOMAIN responses, which means many domain lookups failed. This can indicate typos, broken software, domain generation activity, or suspicious DNS behavior."
+    
+  - id: "test_ping_burst"
+    name: "TEST: ping burst from one source"
+    type: "count_by_src"
+    severity: "low"
+    enabled: true
+    filter: "icmp && ip.src"
+    threshold: 5
