@@ -1,0 +1,208 @@
+internal_networks:
+  - "10.0.0.0/24"
+
+trusted_devices:
+  - "10.0.0.63"   # trusted device 1
+  - "10.0.0.23"   # trusted device 2
+
+ignore_ips:
+  - "10.0.0.1"    # pi gateway
+
+rules:
+  - id: "ssh_scan"
+    name: "SSH scan or brute-force behavior"
+    type: "count_by_src_dstport"
+    severity: "medium"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==22 && ip.src"
+    threshold: 80
+    window_seconds: 300
+    cooldown_seconds: 900
+    trusted_device_multiplier: 2
+    message: "One source sent many SSH connection attempts to port 22."
+
+  - id: "rdp_scan"
+    name: "RDP scan behavior"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==3389 && ip.src"
+    threshold: 10
+    window_seconds: 300
+    cooldown_seconds: 900
+    message: "One source repeatedly tried to connect to Remote Desktop port 3389."
+
+  - id: "smb_scan"
+    name: "SMB scan behavior"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==445 && ip.src"
+    threshold: 10
+    window_seconds: 300
+    cooldown_seconds: 900
+    message: "One source repeatedly tried to connect to SMB port 445."
+
+  - id: "telnet_scan"
+    name: "Telnet scan behavior"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==23 && ip.src"
+    threshold: 4
+    window_seconds: 300
+    cooldown_seconds: 900
+    message: "One source repeatedly tried to connect to insecure Telnet port 23."
+
+  - id: "adb_scan"
+    name: "Android Debug Bridge probe"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==5555 && ip.src"
+    threshold: 3
+    window_seconds: 300
+    cooldown_seconds: 900
+    message: "One source tried to connect to Android Debug Bridge port 5555."
+
+  - id: "docker_api_scan"
+    name: "Docker API probe"
+    type: "count_by_src_dstport"
+    severity: "high"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport==2375 && ip.src"
+    threshold: 3
+    window_seconds: 300
+    cooldown_seconds: 900
+    message: "One source tried to connect to Docker API port 2375."
+
+  - id: "router_admin_scan"
+    name: "Router or appliance admin ports scanned"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "(tcp.flags.syn==1 && tcp.flags.ack==0) && (tcp.dstport==7547 || tcp.dstport==8080 || tcp.dstport==8443 || tcp.dstport==8291 || tcp.dstport==8728) && ip.src"
+    threshold: 12
+    window_seconds: 300
+    cooldown_seconds: 900
+    message: "One source tried multiple common router or appliance management ports."
+
+  - id: "internal_port_scan"
+    name: "Internal device scanning many ports"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    src_scope: "internal"
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && tcp.dstport && ip.src"
+    threshold: 60
+    window_seconds: 300
+    cooldown_seconds: 900
+    min_unique_dst_ports: 10
+    trusted_device_multiplier: 2
+    message: "An internal device contacted many destination ports in a short time."
+
+  - id: "external_sensitive_port_scan"
+    name: "External source scanning sensitive ports"
+    type: "count_by_src"
+    severity: "high"
+    enabled: true
+    src_scope: "external"
+    filter: "(tcp.flags.syn==1 && tcp.flags.ack==0) && (tcp.dstport==21 || tcp.dstport==22 || tcp.dstport==23 || tcp.dstport==445 || tcp.dstport==3389 || tcp.dstport==5900 || tcp.dstport==5555 || tcp.dstport==2375) && ip.src"
+    threshold: 15
+    window_seconds: 300
+    cooldown_seconds: 900
+    min_unique_dst_ports: 3
+    message: "An external source scanned multiple sensitive service ports."
+
+  - id: "syn_spike"
+    name: "High SYN count from one source"
+    type: "count_by_src"
+    severity: "low"
+    enabled: true
+    filter: "tcp.flags.syn==1 && tcp.flags.ack==0 && ip.src"
+    threshold: 400
+    window_seconds: 300
+    cooldown_seconds: 900
+    trusted_device_multiplier: 2
+    message: "One source sent an unusually high number of TCP SYN packets."
+
+  - id: "icmp_spike"
+    name: "High ICMP count from one source"
+    type: "count_by_src"
+    severity: "low"
+    enabled: true
+    filter: "icmp && ip.src"
+    threshold: 300
+    window_seconds: 300
+    cooldown_seconds: 900
+    trusted_device_multiplier: 2
+    message: "One source sent a high number of ICMP packets."
+
+  - id: "dns_dynamic_dns_watch"
+    name: "Dynamic DNS lookup observed"
+    type: "dns_domain"
+    severity: "medium"
+    enabled: true
+    cooldown_seconds: 1800
+    match:
+      domains:
+        - "duckdns.org"
+        - "no-ip.com"
+        - "ddns.net"
+        - "dynv6.net"
+      match_subdomains: true
+    message: "A device looked up a dynamic DNS domain."
+
+  - id: "dns_tunnel_or_remote_access_watch"
+    name: "Tunnel or remote-access DNS lookup observed"
+    type: "dns_domain"
+    severity: "high"
+    enabled: true
+    cooldown_seconds: 1800
+    match:
+      domains:
+        - "ngrok.io"
+        - "ngrok-free.app"
+        - "trycloudflare.com"
+        - "serveo.net"
+      match_subdomains: true
+    message: "A device looked up a known tunneling or temporary remote-access service."
+
+  - id: "dns_nxdomain_spike"
+    name: "Repeated failed DNS lookups"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "dns.flags.rcode==3 && ip.src"
+    threshold: 80
+    window_seconds: 600
+    cooldown_seconds: 900
+    trusted_device_multiplier: 2
+    message: "One device generated many failed DNS lookups."
+
+  - id: "large_outbound_flow"
+    name: "Large outbound traffic volume"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    src_scope: "internal"
+    filter: "tcp.len > 1000 && ip.src"
+    threshold: 800
+    window_seconds: 600
+    cooldown_seconds: 900
+    trusted_device_multiplier: 2
+    message: "One internal device sent many large TCP packets."
+
+  - id: "tcp_reset_spike"
+    name: "TCP reset spike"
+    type: "count_by_src"
+    severity: "medium"
+    enabled: true
+    filter: "tcp.flags.reset==1 && ip.src"
+    threshold: 120
+    window_seconds: 300
+    cooldown_seconds: 900
+    trusted_device_multiplier: 2
+    message: "One device generated many TCP reset packets."
+
+
