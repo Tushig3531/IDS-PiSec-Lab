@@ -413,6 +413,16 @@ The biggest lesson was that building an IDS/SIEM from scratch is not only about 
 
 ---
 
+## Pictures
+
+![alt text](network.png) 
+![alt text](alerts.jpg)
+![alt text](rule_creation.png) 
+![alt text](siem.jpg) 
+![alt text](terminal.jpg) 
+
+---
+
 ## Roadmap
 
 ### Next improvements:
