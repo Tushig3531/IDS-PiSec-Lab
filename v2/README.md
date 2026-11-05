@@ -150,7 +150,7 @@ launchctl kickstart -k gui/$(id -u)/com.example.shippcaps
 ### 3) Start the IDS analyzer on Raspberry Pi
 ```bash
 cd ~/Desktop/IDS_Project
-python3 ids_watch.py
+python3 src/ids_watch_v2.py
 ```
 
 ### 4) Start pulling alerts back to Mac

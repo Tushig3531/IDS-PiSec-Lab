@@ -1,444 +1,164 @@
-# IDS Project v3
+# PiSec Lab v3: Raspberry Pi Security Gateway
 
-This README documents version 3 of my lightweight IDS/SIEM and firewall project built with a Raspberry Pi security gateway.
+A Raspberry Pi that runs its own Wi-Fi network, captures every packet from the devices on it, checks the traffic against my own detection rules, and shows the alerts on a web dashboard. Old packet captures are turned into searchable records in a small SQLite SIEM and then deleted to save space.
 
-In version 2, the project focused on building a custom Python IDS analyzer, processing PCAPs, creating my own YAML-based detection rules, and generating structured alerts.
+All IPs, usernames, hostnames, MAC addresses and paths in this repo are anonymized.
 
-In version 3, I expanded the project into a more complete security monitoring system. The Raspberry Pi now acts as a small network gateway that can create its own Wi-Fi network, route device traffic, capture packets, analyze traffic with IDS rules, show alerts in a web dashboard, create rules from the dashboard, and store cleaned metadata in a SQLite-based mini-SIEM.
+![Dashboard alerts](images/dashboard-alerts.jpg)
 
-All IP addresses, usernames, hostnames, MAC addresses, SSIDs, and personal paths are anonymized or generalized.
+## At a Glance
 
----
+| | |
+|---|---|
+| Hardware | Raspberry Pi as Wi-Fi access point, router and sensor |
+| Capture | tcpdump, new PCAP file every 60 seconds |
+| Detection | Custom Python engine, 16 YAML rules, parsed with TShark |
+| Alerts | JSON Lines file + FastAPI web dashboard |
+| Storage | SQLite mini-SIEM (flows, DNS queries, devices, security events) |
+| Automation | systemd services and timers, runs 24/7 |
+| Remote access | Dashboard reachable only through Tailscale |
 
-## What’s New in v3
+At the time of the SIEM screenshot below, it had processed **1,799 PCAP files** into **125,858 network flows** and **25,705 DNS queries**.
 
-- Converted the Raspberry Pi into a Wi-Fi security gateway
-- Created a Pi-hosted Wi-Fi network for monitored devices
-- Added automated PCAP movement from capture folder to IDS input
-- Improved IDS workflow with systemd services and timers
-- Built a FastAPI dashboard for alerts and rule creation
-- Added IDS rule creation directly from the dashboard
-- Added basic firewall rule creation from the dashboard
-- Generated firewall rules safely instead of allowing raw shell commands
-- Added a SQLite-based mini-SIEM
-- Extracted metadata from archived PCAPs into the SIEM database
-- Stored flows, DNS queries, devices, security events, and processed PCAP records
-- Added automatic PCAP cleanup after successful SIEM import
-- Added Tailscale access for private dashboard access
-- Improved the overall workflow from packet capture to long-term metadata storage
-
----
-
-## Architecture Overview
+## How It Works
 
 ```text
-Client Devices --> Raspberry Pi Wi-Fi Network --> Raspberry Pi Gateway --> Packet Capture --> IDS Analyzer --> Alerts and Dashboard --> SIEM Metadata Database
+Devices on Pi Wi-Fi
+      |
+      v
+tcpdump  -->  pcaps_capture/      (new file every 60 s)
+      |
+      v
+mover timer  -->  pcaps_in/       (only finished files)
+      |
+      v
+ids_watch_v3.py + rules_v3.yaml   (TShark parses, rules check)
+      |
+      +-->  alert.jsonl  -->  dashboard
+      |
+      v
+pcaps_archive/  -->  pcap_to_siem.py  -->  siem.db  -->  PCAP deleted
 ```
 
-The Raspberry Pi now works as:
-- Wi-Fi access point
-- DHCP/DNS gateway
-- Traffic capture point
-- IDS sensor
-- Alert generator
-- Dashboard server
-- Basic firewall controller
-- Mini-SIEM metadata collector
-
----
-
-## Main Components
-
-### Raspberry Pi Gateway
-
-The Raspberry Pi creates a dedicated Wi-Fi network for monitored devices.
-
-Core services:
-- hostapd for Wi-Fi access point mode
-- dnsmasq for DHCP/DNS
-- Linux routing for traffic forwarding
-- tcpdump for packet capture
-- iptables for routing and basic firewall control
-
-The goal is to route device traffic through the Pi so the traffic can be captured, analyzed, and monitored.
-
----
-
-## PCAP Capture Workflow
-
-Traffic is captured from the Pi Wi-Fi interface using tcpdump.
-
-The capture process creates rotating PCAP files.
+## Folder Layout
 
 ```text
-Wi-Fi traffic --> tcpdump --> pcaps_capture/
-```
-A separate mover script moves only completed PCAPs into the IDS input folder.
-
-```text
-pcaps_capture/ --> move-completed-pcaps.sh --> pcaps_in/
-```
-This prevents the IDS from analyzing PCAP files while they are still being written.
-
----
-
-## IDS Processing Workflow
-
-The IDS watcher monitors the incoming PCAP folder.
-
-```text
-pcaps_in/ --> ids_watch_v3.py --> rules_v3.yaml --> alert.jsonl --> pcaps_archive/
-```
-The IDS analyzer:
-- Watches for new PCAP files
-- Uses tshark to extract packet fields
-- Applies custom YAML-based detection rules
-- Generates structured JSON alerts
-- Moves processed PCAPs to archive
-- Writes debug logs for troubleshooting
-
----
-
-## Custom IDS Rule System
-
-Rules are stored in: rules_v3.yaml
-
-The rule system supports:
-- Rule ID
-- Rule name
-- Rule type
-- Severity
-- Enabled/disabled status
-- Tshark display filter
-- Threshold
-- Time window
-- Cooldown period
-- Source scope
-- Trusted device multiplier
-- Unique destination IP threshold
-- Unique destination port threshold
-- Alert message
-
-Supported rule types include:
-- dns_domain
-- count_by_src
-- count_by_src_dstport
-
-This makes the IDS flexible and easier to tune.
-
---- 
-
-## Detection Coverage
-
-The IDS can detect behaviors such as:
-- SSH scanning
-- RDP scanning
-- SMB scanning
-- Telnet probing
-- Docker API probing
-- ADB probing
-- Router/admin page probing
-- Internal port scanning
-- External sensitive-port scanning
-- SYN spikes
-- ICMP spikes
-- Dynamic DNS lookups
-- Tunneling or remote-access domain lookups
-- DNS failure spikes
-- Large outbound traffic
-- TCP reset spikes
-- Unknown device activity
-
---- 
-
-## Trusted Device Logic
-
-Trusted devices can be handled with different thresholds.
-
-This helps reduce false positives from normal activity on known devices.
-
-Idea:
-trusted device = monitored with more tolerant thresholds
-unknown device = monitored more aggressively
-
-This was useful because normal behavior such as uploads, sync traffic, SSH, or testing can otherwise trigger noisy alerts.
-
----
-
-## Alert Output
-
-Alerts are written in JSON Lines format: ids_alerts/alert.jsonl
-
-Alert structure:
-```json
-{
-  "ts": "2026-01-01T00:00:00+00:00",
-  "rule_id": "example_rule",
-  "rule_name": "Example Rule",
-  "severity": "medium",
-  "message": "Example alert message.",
-  "src_ip": "<client_ip>",
-  "count": 100,
-  "threshold": 50,
-  "pcap": "example.pcap"
-}
+v3/
+  src/
+    ids_watch_v3.py    watches for new PCAPs and runs the rules
+    dashboard.py       FastAPI dashboard (alerts, rule creation, SIEM view)
+    pcap_to_siem.py    turns archived PCAPs into SQLite records
+  rules/
+    rules_v3.yaml      the 16 detection rules
+  images/              screenshots
 ```
 
----
+## The Gateway
+
+The Pi creates its own Wi-Fi network, and the devices I want to monitor join it. All their traffic passes through the Pi.
+
+| Service | Job |
+|---|---|
+| hostapd | Runs the Wi-Fi access point |
+| dnsmasq | Hands out IPs (DHCP) and answers DNS |
+| Linux routing + iptables | Forwards traffic to the internet and applies firewall rules |
+| tcpdump | Captures the traffic |
+
+![Wi-Fi network](images/wifi-network.png)
+
+## Detection Rules
+
+Every rule lives in `rules/rules_v3.yaml`. Each one has a threshold, a time window and a cooldown so the same event does not alert over and over.
+
+| Rule | What it catches | Severity |
+|---|---|---|
+| ssh_scan | Many connection attempts to SSH (22) | Medium |
+| rdp_scan | Attempts on Remote Desktop (3389) | High |
+| smb_scan | Attempts on SMB file sharing (445) | High |
+| telnet_scan | Attempts on Telnet (23) | High |
+| adb_scan | Probes on Android Debug Bridge (5555) | High |
+| docker_api_scan | Probes on the Docker API (2375) | High |
+| router_admin_scan | Probes on router admin ports | Medium |
+| internal_port_scan | An inside device hitting many ports | Medium |
+| external_sensitive_port_scan | An outside source hitting sensitive ports | High |
+| syn_spike | Unusually high TCP SYN count | Low |
+| icmp_spike | Unusually high ping traffic | Low |
+| dns_dynamic_dns_watch | Lookups of dynamic DNS domains (duckdns, no-ip) | Medium |
+| dns_tunnel_or_remote_access_watch | Lookups of tunneling services (ngrok, trycloudflare) | High |
+| dns_nxdomain_spike | Many failed DNS lookups | Medium |
+| large_outbound_flow | An inside device sending a lot of data out | Medium |
+| tcp_reset_spike | Many TCP resets | Medium |
+
+### Cutting false positives
+
+My own laptop and phone upload files, sync and run SSH all the time, which kept tripping the rules. So the rules file lists **trusted devices**, and most rules have a `trusted_device_multiplier`. For a trusted device the threshold is doubled. Unknown devices are watched at the normal, stricter level.
+
+Rules can also be limited to inside or outside sources (`src_scope`) and can require a minimum number of different ports before alerting (`min_unique_dst_ports`).
 
 ## Dashboard
-Version 3 adds a FastAPI-based web dashboard.
 
-The dashboard includes:
-- Alert overview
-- High / medium / low alert counts
-- Latest alert display
-- Alert table
-- Top source IPs
-- Top rules
-- Selected alert details
-- Debug log view
-- IDS rule creation
-- Basic firewall rule creation
-- SIEM metadata view
+Built with FastAPI and runs on the Pi. Three tabs:
 
-Dashboard sections:
-- Alerts
-- Create Rule
-- SIEM
+| Tab | What it does |
+|---|---|
+| Alerts | Counts by severity, alert table with filters, top source IPs and top rules, plus a plain English "meaning" and "next step" for each alert |
+| Create Rule | Form to add an IDS rule or a firewall rule. Input is validated, and no raw shell commands are accepted. Firewall rules are turned into iptables rules by the backend |
+| SIEM | Search security events, top flow sources and top DNS queries from the database |
 
-The dashboard runs on the Raspberry Pi and can be accessed from trusted/private network paths.
+![Create rule](images/dashboard-create-rule.png)
 
----
-
-## IDS Rule Creation from Dashboard
-The dashboard can create IDS rules through a form.
-
-The user fills in fields such as:
-- Rule ID
-- Name
-- Type
-- Severity
-- Filter
-- Threshold
-- Window seconds
-- Cooldown seconds
-- Source scope
-- Trusted device multiplier
-- Message
-- Enabled status
-
-The backend validates the input and appends the rule to: rules_v3.yaml
-
-This allows new IDS logic to be added without manually editing the YAML file every time.
-
----
-
-## Basic Firewall Rule Creation
-Version 3 also adds basic firewall rule creation from the dashboard.
-
-The dashboard does not accept raw shell commands. Instead, it accepts safe form fields and generates controlled iptables rules.
-
-Firewall rule fields include:
-- Rule ID
-- Name
-- Chain
-- Action
-- Protocol
-- Input interface
-- Output interface
-- Source IP
-- Source MAC
-- Destination port
-- Message
-- Enabled status
-
-The workflow is:
-```text
-Dashboard form --> Validate input --> Save rule --> Generate firewall script --> Apply firewall service
-```
-This helped me understand firewall rule order, especially the difference between appending a rule and inserting a rule before broader allow rules.
-
----
+![SIEM tab](images/dashboard-siem.jpg)
 
 ## Mini-SIEM
-Version 3 adds a SQLite-based mini-SIEM.
 
-The SIEM database stores cleaned metadata instead of keeping raw PCAP files.
-Database: siem/siem.db
+`pcap_to_siem.py` reads each archived PCAP and saves only the useful metadata, then deletes the PCAP. It checks that the file is readable before deleting anything.
 
-Tables include:
-- security_events
-- network_flows
-- dns_queries
-- devices
-- processed_pcaps
-
-This allows the system to keep useful searchable security history without filling storage with raw PCAPs.
-
----
-
-## SIEM Metadata Workflow
-
-Archived PCAPs are processed into metadata.
-```text
-pcaps_archive/ --> pcap_to_siem.py --> siem.db --> delete processed PCAP
-```
-
-The SIEM collector extracts:
-- IDS alerts
-- Firewall events
-- Network flows
-- DNS queries
-- Device information
-- Processed PCAP records
-
-After a PCAP is successfully imported into the database, it can be deleted to save storage.
-
----
+| Table | Holds |
+|---|---|
+| security_events | IDS alerts and firewall events |
+| network_flows | Who talked to whom, ports, packets, bytes |
+| dns_queries | Every DNS lookup and its result |
+| devices | IP, MAC and hostname (from DHCP leases and traffic) |
+| processed_pcaps | Which files were already imported |
 
 ## Automation
-The project uses systemd services and timers for automation.
 
-Main services/timers:
-- move-pcaps.timer
-- ids-watch.service
-- ids-dashboard.service
-- siem-ingest.timer
-- siem-ingest.service
+| Unit | Job |
+|---|---|
+| move-pcaps.timer | Every 10 seconds, moves finished PCAPs to the IDS folder |
+| ids-watch.service | Runs the IDS engine all the time |
+| ids-dashboard.service | Runs the dashboard |
+| siem-ingest.timer | Regularly imports archived PCAPs into SQLite |
+| ids-firewall.service | Applies the firewall rules at boot |
 
-Their purpose:
-- Move completed PCAPs
-- Run the IDS watcher
-- Run the dashboard
-- Import archived PCAPs into the SIEM database
-- Delete processed PCAPs after successful import
+![systemd services](images/systemd-services.jpg)
 
-This makes the pipeline more reliable and closer to a real security monitoring system.
+## Running It
 
----
-
-## Tailscale / Private Access
-
-The dashboard can be accessed through a private network path using Tailscale.
-
-This allows dashboard access without exposing the service publicly to the internet.
-
-The goal is:
-```text
-Trusted device --> Private tunnel --> Raspberry Pi dashboard
-```
-
----
-
-## Current Workflow
-
-The current version works like this:
-
-1. Raspberry Pi creates Wi-Fi network
-2. Client devices connect through the Pi
-3. tcpdump captures traffic
-4. Completed PCAPs move into IDS input folder
-5. IDS watcher analyzes PCAPs
-6. Alerts are written to alert.jsonl
-7. Dashboard displays alerts
-8. Dashboard can create IDS rules
-9. Dashboard can create basic firewall rules
-10. Processed PCAPs move to archive
-11. SIEM ingest extracts metadata
-12. Metadata is stored in SQLite
-13. Successfully processed PCAPs are deleted
-14. SIEM tab displays searchable metadata
-
----
-
-## Running
-
-### Start the main services:
 ```bash
-sudo systemctl restart ids-firewall.service
-sudo systemctl restart move-pcaps.timer
-sudo systemctl restart ids-watch.service
-sudo systemctl restart siem-ingest.timer
-sudo systemctl restart ids-dashboard.service
-```
+# start everything
+sudo systemctl restart ids-firewall.service move-pcaps.timer ids-watch.service siem-ingest.timer ids-dashboard.service
 
-### Start packet capture:
-```bash
+# start capture
 sudo tcpdump -i <wifi_interface> -n -s 96 -w /path/to/project/pcaps_capture/cap_%Y%m%d_%H%M%S.pcap -G 60
-```
 
-### Force one PCAP move:
-```bash
-sudo systemctl start move-pcaps.service
-```
-
-### Force one SIEM ingest:
-```bash
-sudo systemctl start siem-ingest.service
-```
-
-### Check alerts:
-```bash
+# watch alerts live
 tail -f /path/to/project/ids_alerts/alert.jsonl
-```
 
-### Check SIEM database:
-```bash
+# check the database
 sqlite3 /path/to/project/siem/siem.db ".tables"
 ```
 
----
-
 ## What I Learned
 
-This version helped me understand the full security monitoring pipeline:
+Writing the rules was the easy part. Most of the work was making the pipeline reliable: not reading a PCAP while it is still being written, keeping storage from filling up, tuning noisy rules, validating dashboard input, and getting systemd services and timers to recover on their own. I also learned firewall rule order the hard way: an inserted rule and an appended rule behave very differently when a broad allow rule is already in place.
 
-- Linux networking
-- Wi-Fi access point setup
-- Packet capture
-- PCAP handling
-- Detection engineering
-- Rule tuning
-- Alert generation
-- Dashboard development
-- SIEM metadata design
-- SQLite storage
-- Systemd automation
-- Firewall rule logic
-- Storage management
-- Troubleshooting services and timers
+## Next Steps
 
-The biggest lesson was that building an IDS/SIEM from scratch is not only about writing detection rules. It also requires reliable file handling, automation, logging, storage control, rule validation, and a dashboard that makes alerts understandable.
+1. Log firewall drops and send them to the dashboard
+2. Better detection of new, unknown devices
+3. Timeline view for alerts and flows
+4. Enable and disable rules from the dashboard
+5. Configurable PCAP retention
 
----
-
-## Pictures
-
-![alt text](network.png) 
-![alt text](alerts.jpg)
-![alt text](rule_creation.png) 
-![alt text](siem.jpg) 
-![alt text](terminal.jpg) 
-
----
-
-## Roadmap
-
-### Next improvements:
-Improve firewall alerting with LOG rules and a firewall log watcher
-- Add stronger unknown-device detection
-- Add better device identity mapping
-- Add more SIEM search filters
-- Add timeline view for alerts and flows
-- Add better dashboard controls for enabling/disabling rules
-- Add PCAP retention policy configuration
-- Continue reducing false positives
-
----
-
-## Project Status
-
-Version 3 is a working personal IDS/SIEM gateway prototype.
-
-It is not a production security product, but it is a hands-on project for learning cybersecurity, Linux networking, detection engineering, firewalling, packet analysis, automation, and SIEM design.
+This is a working personal prototype for learning, not a production security product.
